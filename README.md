@@ -1,7 +1,7 @@
 # Tropical cyclones in 3D, updated daily
 
 A GitHub Pages site that shows a 3D flow animation for every active tropical cyclone on Earth,
-rebuilt every morning by GitHub Actions. It also serves as a portfolio page (edit `site/config.js`).
+rebuilt every morning by GitHub Actions.
 
 **What happens each day** (`.github/workflows/update.yml`, 06:40 UTC)
 
@@ -16,8 +16,6 @@ rebuilt every morning by GitHub Actions. It also serves as a portfolio page (edi
 
 ## The website
 
-- **Globe hero**: the Earth right now with the real day/night terminator; active storms spin in
-  their hemisphere's direction; drag to turn it, click a storm to open it.
 - **Storm viewer**: the official intensity curve *is* the video timeline. Drag along it to scrub,
   step ±1 h, change speed. Live cards show frame time, wind, stage and centre, and a regional map
   moves the storm (and the night side) with the video. Tabs: written overview, structure gauges,
@@ -32,27 +30,6 @@ rebuilt every morning by GitHub Actions. It also serves as a portfolio page (edi
 - Everything the page needs (d3, topojson, Natural Earth land) is in `site/vendor/`, and each
   daily build stamps the script and stylesheet URLs so browsers never run an old copy.
 
-## Set up (once)
-
-1. Create a **public** repository on GitHub and push these files to it.
-2. Repository **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-3. **Actions → Daily cyclone videos → Run workflow** to build the site the first time
-   (about 5–10 min per active storm). After that it runs by itself every day.
-4. The site is at `https://<your-username>.github.io/<repo-name>/`.
-5. Edit `site/config.js` with your name, links and research interests, then commit.
-
-## Settings
-
-`scripts/run_daily.py` options (edit the command in the workflow):
-
-| option | default | meaning |
-|---|---|---|
-| `--max-days` | 5 | length of each video window |
-| `--max-storms` | 12 | most storms rendered per day (strongest first) |
-| `--archive-max` | 40 | number of past storms kept on the site |
-| `--include-invests` | off | also render invest areas |
-
-Look of the videos: `CFG` at the top of `tc3d/render.py`.
 
 ## Notes
 
