@@ -22,6 +22,7 @@
   <nav aria-label="Sections">
     <a href="#earth">Earth</a><a href="#viewer">Viewer</a><a href="#compare">Compare</a><a href="#season">Season</a><a href="#archive">Archive</a><a href="#about">About</a>
   </nav>
+  <div class="progress" aria-hidden="true"><i id="progress"></i></div>
 </header>
 
 <main>
@@ -30,12 +31,13 @@
     <video id="hero-video" muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"></video>
     <div class="cine-shade" aria-hidden="true"></div>
     <div class="cine-text">
-      <p class="eyebrow">Rebuilt every morning from GFS analyses</p>
+      <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span><span id="live-clock">Live</span> · rebuilt every morning from GFS analyses</p>
       <h1>Every tropical cyclone on Earth, <span class="accent">in three dimensions</span></h1>
       <p id="headline" class="cine-live">Loading the latest analysis…</p>
       <p id="status" class="status"></p>
       <p class="cine-cta"><a class="btn" href="#viewer" id="cta-watch">Open the storm viewer</a><a class="btn ghost" href="#earth">See the planet</a></p>
     </div>
+    <div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
     <ol class="storm-list" id="storm-list" aria-label="Active storms"></ol>
     <a class="cue" href="#earth" aria-label="Scroll to the globe"><span></span></a>
   </section>
@@ -52,9 +54,14 @@
       <h2>Day, night and every active storm</h2>
       <p class="lede">The Earth as it is lit at this moment: daylight where the Sun is up, city lights on the night side. Select a storm to open it.</p>
       <dl class="stats" id="stats"></dl>
-      <p class="daynight"><span class="dn-key"><i class="d"></i>Day side</span><span class="dn-key"><i class="n"></i>Night side (city lights)</span>
-        <span class="dn-key"><i class="t"></i>Day–night line</span></p>
+      <p class="daynight"><span class="dn-key"><i class="grad"></i>Daylight fading through twilight into night</span></p>
       <p class="daynight" id="sun-info"></p>
+      <div class="replay" role="group" aria-label="Replay the last days">
+        <button type="button" id="r-play" class="btn">▶ Replay the last days</button>
+        <button type="button" id="r-live" class="btn ghost wide">Back to now</button>
+        <input type="range" id="r-range" min="0" max="1000" value="1000" aria-label="Time in the replay">
+        <p class="r-time"><span id="r-time">Now</span><span class="hint">Storms move along their tracks while day and night sweep across the Earth.</span></p>
+      </div>
       <p class="earth-zoom">
         <button type="button" id="e-in" class="btn ghost" aria-label="Zoom in">+</button><button type="button" id="e-out" class="btn ghost" aria-label="Zoom out">−</button>
         <button type="button" id="e-spin" class="btn ghost wide" aria-pressed="false">Spin</button>

@@ -43,17 +43,18 @@
     void main(){
       vec3 n = normalize(vN), s = normalize(sun), v = normalize(cameraPosition - vP);
       float d = dot(n, s);
-      float day = smoothstep(-0.035, 0.09, d);
+      float day = smoothstep(-0.12, 0.18, d);                          // soft daylight falloff through twilight
       vec3 dc = texture2D(dayT, vUv).rgb, nc = texture2D(nightT, vUv).rgb;
       float w = texture2D(waterT, vUv).r;
       vec3 lit = dc * (0.42 + 0.90 * pow(max(d, 0.0), 0.5));
       float L = dot(nc, vec3(0.30, 0.59, 0.11));                                     // keep only the city lights,
-      vec3 lights = vec3(1.0, 0.78, 0.45) * smoothstep(0.16, 0.55, L) * 1.5 * (1.0 - day);  // not the image's bluish land
+      float dark = 1.0 - smoothstep(-0.28, 0.02, d);                     // city lights fade in as twilight deepens
+      vec3 lights = vec3(1.0, 0.78, 0.45) * smoothstep(0.16, 0.55, L) * 1.5 * dark;      // not the image's bluish land
       vec3 moon = dc * vec3(0.075, 0.095, 0.16) + vec3(0.004, 0.008, 0.02);   // dark night, land just visible
       vec3 col = mix(moon + lights, lit, day);
       vec3 h = normalize(s + v); col += vec3(1.0, 0.92, 0.8) * pow(max(dot(n, h), 0.0), 70.0) * w * 0.65 * day;
       float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0); col += vec3(0.30, 0.58, 1.0) * rim * (0.05 + 0.6 * day);
-      col += vec3(1.0, 0.72, 0.32) * exp(-pow(d / 0.012, 2.0)) * 0.55 * showLine;        // the terminator line
+      col += vec3(0.95, 0.55, 0.30) * exp(-pow((d + 0.03) / 0.10, 2.0)) * 0.05;          // faint warm twilight glow
       gl_FragColor = vec4(mix(vec3(0.03, 0.06, 0.11), col, ready), 1.0);
     }`;
   const ATMO_V = `varying vec3 vN; void main(){ vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
@@ -100,13 +101,13 @@
 
     // storms
     const stormLayer = new THREE.Group(); globe.add(stormLayer);
-    let storms = [], selKey = null, sprites = [];
+    let storms = [], selKey = null, sprites = [], entries = [], replayT = null;
     const texCache = new Map(), tex = (c) => texCache.get(c) || (texCache.set(c, symbolTexture(c)), texCache.get(c));
     const labelsBox = opts.labels || null;
     function clearLayer() {
       for (const o of stormLayer.children.slice()) { stormLayer.remove(o); o.geometry && o.geometry.dispose(); o.material && o.material.dispose && o.material.dispose(); }
       if (labelsBox) labelsBox.textContent = "";
-      sprites = [];
+      sprites = []; entries = [];
     }
     function trackMesh(pts, sel) {
       const P = [];
@@ -116,7 +117,7 @@
         const b0 = P[P.length - 1][0].clone().normalize(), b1 = a.clone().normalize();
         for (let k = 1; k <= 6; k++) P.push([b0.clone().lerp(b1, k / 6).normalize().multiplyScalar(1.006), pts[i].color]);
       }
-      if (P.length < 2) return [];
+      if (P.length < 2) return { meshes: [], P };
       const curve = new THREE.CatmullRomCurve3(P.map((p) => p[0]));
       const out = [];
       for (const [r, op] of sel ? [[0.0055, 1], [0.016, 0.22]] : [[0.0032, 0.75], [0.010, 0.12]]) {
@@ -128,18 +129,32 @@
         out.push(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: op,
           blending: op < 0.5 ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: op >= 0.5 })));
       }
-      return out;
+      return { meshes: out, P, seg: P.length * 2 };
+    }
+    const ringTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+      g.strokeStyle = "#ffffff"; g.lineWidth = 5; g.beginPath(); g.arc(64, 64, 56, 0, Math.PI * 2); g.stroke(); return new THREE.CanvasTexture(c); })();
+    const slerpLL = (a, b, f) => ll2v(a.lat, a.lon, 1).lerp(ll2v(b.lat, b.lon, 1), f).normalize();
+    function stateAt(s, t) {                      // position and intensity of a storm at time t (null before it formed)
+      const P = s.pts; if (t === null || t === undefined) return { i: P.length - 1, f: 0, v: ll2v(P[P.length - 1].lat, P[P.length - 1].lon, 1), kt: s.kt };
+      if (!P.length || t < P[0].t) return null;
+      if (t >= P[P.length - 1].t) return { i: P.length - 1, f: 0, v: ll2v(P[P.length - 1].lat, P[P.length - 1].lon, 1), kt: P[P.length - 1].kt };
+      let i = 0; while (i < P.length - 2 && P[i + 1].t <= t) i++;
+      const f = (t - P[i].t) / Math.max(1, P[i + 1].t - P[i].t);
+      return { i, f, v: slerpLL(P[i], P[i + 1], f), kt: Math.round(P[i].kt + (P[i + 1].kt - P[i].kt) * f) };
     }
     function setStorms(list, key) {
       storms = list; selKey = key; clearLayer();
       for (const s of storms) {
         if (!s.pts.length) continue;
         const sel = s.key === selKey;
-        for (const m of trackMesh(s.pts, sel)) stormLayer.add(m);
+        const tm = trackMesh(s.pts, sel); for (const m of tm.meshes) stormLayer.add(m);
         const last = s.pts[s.pts.length - 1];
         const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(s.color), transparent: true, depthWrite: false }));
         spr.position.copy(ll2v(last.lat, last.lon, 1.02)); const sc = sel ? 0.15 : 0.11; spr.scale.set(sc, sc, 1);
-        spr.userData = { key: s.key, south: s.south }; stormLayer.add(spr); sprites.push(spr);
+        spr.userData = { key: s.key, south: s.south, sc }; stormLayer.add(spr); sprites.push(spr);
+        const ripples = [0, 0.5].map((off) => { const r = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTex, color: new THREE.Color(s.color),
+          transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); r.userData = { off, sc: sc * 0.9 }; stormLayer.add(r); return r; });
+        entries.push({ s, tm, spr, ripples });
         if (labelsBox) {
           const lab = document.createElement("button"); lab.type = "button"; lab.className = `e-label${sel ? " sel" : ""}`;
           lab.innerHTML = `<b></b><span></span>`; lab.querySelector("b").textContent = s.name; lab.querySelector("span").textContent = `${s.kt} kt`;
@@ -147,13 +162,31 @@
           labelsBox.append(lab); spr.userData.label = lab;
         }
       }
+      applyTime();
     }
+    function applyTime() {                        // place every storm (and its track) at the replay time, or now
+      for (const e of entries) {
+        const st = stateAt(e.s, replayT), lab = e.spr.userData.label;
+        const vis = !!st; e.spr.visible = vis; for (const r of e.ripples) r.visible = vis;
+        if (lab) lab.hidden = !vis;
+        for (const m of e.tm.meshes) {
+          const idx = m.geometry.index; if (!idx) continue;
+          if (!st) { m.geometry.setDrawRange(0, 0); continue; }
+          const n = e.s.pts.length, frac = n > 1 ? Math.min(1, (st.i + st.f) / (n - 1)) : 1;
+          m.geometry.setDrawRange(0, replayT === null ? idx.count : Math.floor(frac * e.tm.seg) * 8 * 6);
+        }
+        if (!st) continue;
+        const pos = st.v.clone().multiplyScalar(1.02); e.spr.position.copy(pos); for (const r of e.ripples) r.position.copy(pos);
+        if (lab) lab.querySelector("span").textContent = `${st.kt} kt`;
+      }
+    }
+    function setTime(ms) { replayT = ms === null || ms === undefined ? null : ms; applyTime(); }
 
     // sun
     let sunMs = Date.now();
     const sunLocal = () => { const [la, lo] = subsolar(sunMs); return ll2v(la, lo, 1).normalize(); };
     function setSun(ms) { sunMs = ms; }
-    setInterval(() => { if (!opts.followTime) sunMs = Date.now(); }, 60000);
+
 
     // interaction: drag to turn, ctrl/cmd + wheel or buttons to zoom, click a storm to open it
     let auto = false, lastUser = 0, drag = null, tween = null, home = null;
@@ -209,7 +242,12 @@
       const dt = Math.min(0.1, (now - (frame.last || now)) / 1000); frame.last = now;
       if (auto && !drag && !tween) globe.rotation.y += 0.06 * dt;            // one turn in about 100 s, on any device
       camera.position.z += (dist - camera.position.z) * 0.12;
+      sunMs = replayT === null ? Date.now() : replayT;                         // terminator moves continuously
       const sl = sunLocal(); sunSpr.position.copy(sl).multiplyScalar(1.03);
+      for (const e of entries) for (const r of e.ripples) {                        // expanding pulse around each storm
+        const ph = ((now / 1700) + r.userData.off) % 1, k = r.userData.sc * (1 + 2.4 * ph);
+        r.scale.set(k, k, 1); r.material.opacity = 0.55 * (1 - ph) * (r.visible ? 1 : 0);
+      }
       uni.sun.value.copy(sl).applyQuaternion(globe.quaternion);
       if (fadeIn) uni.ready.value = Math.min(1, (now - fadeIn) / 900);
       for (const s of sprites) {
@@ -228,7 +266,7 @@
     requestAnimationFrame(frame);
     return { setStorms, focus, setSun, zoomIn: () => zoom(1 / 1.25), zoomOut: () => zoom(1.25),
              view: () => ({ y: globe.rotation.y, x: globe.rotation.x, auto, tween: !!tween }),
-             setSpin, reset, subsolar: () => subsolar(sunMs), showTerminator: (on) => { uni.showLine.value = on ? 1 : 0; } };
+             setSpin, reset, setTime, subsolar: () => subsolar(sunMs) };
   }
   window.Earth = { create };
 })();

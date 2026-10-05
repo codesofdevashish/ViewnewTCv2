@@ -23,6 +23,11 @@ rebuilt every morning by GitHub Actions. It also serves as a portfolio page (edi
   blended along the real terminator, with ocean sun glint, atmosphere and stars. Storm tracks glow
   in Saffir–Simpson colours, storms spin in their hemisphere's direction; drag to turn, click a
   storm to open it. Falls back to a flat d3 globe on devices without WebGL.
+- **Live and dynamic**: a live UTC clock and a ticker of current storm facts in the opening, a
+  parallax as you scroll, a **replay** of the last days on the globe (storms move along their tracks,
+  intensities update and day and night sweep across the planet; it plays once on arrival), pulsing
+  storms, count-up statistics, silent video previews on archive cards, and a header that follows the
+  section you are in.
 - **Storm viewer**: the official intensity curve *is* the video timeline. Drag along it to scrub,
   step ±1 h, change speed. Live cards show frame time, wind, stage and centre, and a regional map
   moves the storm (and the night side) with the video. Tabs: written overview, structure gauges,
@@ -36,6 +41,28 @@ rebuilt every morning by GitHub Actions. It also serves as a portfolio page (edi
 - **Archive**, **interactive guide** to a frame, **About**. Light by default, dark on request.
 - Everything the page needs (d3, topojson, Natural Earth land) is in `site/vendor/`, and each
   daily build stamps the script and stylesheet URLs so browsers never run an old copy.
+
+## Set up (once)
+
+1. Create a **public** repository on GitHub and push these files to it.
+2. Repository **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. **Actions → Daily cyclone videos → Run workflow** to build the site the first time
+   (about 5–10 min per active storm). After that it runs by itself every day.
+4. The site is at `https://<your-username>.github.io/<repo-name>/`.
+5. Edit `site/config.js` with your name, links and research interests, then commit.
+
+## Settings
+
+`scripts/run_daily.py` options (edit the command in the workflow):
+
+| option | default | meaning |
+|---|---|---|
+| `--max-days` | 5 | length of each video window |
+| `--max-storms` | 12 | most storms rendered per day (strongest first) |
+| `--archive-max` | 40 | number of past storms kept on the site |
+| `--include-invests` | off | also render invest areas |
+
+Look of the videos: `CFG` at the top of `tc3d/render.py`.
 
 ## Notes
 

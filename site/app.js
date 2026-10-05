@@ -86,7 +86,7 @@
     `<circle r="${r * .42}" fill="var(--panel)" stroke="${color}" stroke-width="${r * .18}"/></g>`;
 
   // ------------------------------------------------------------------ state
-  let DATA = null, ALL = [], ACTIVE = [], ARCH = [], SEL = null, LAND110 = null, LAND50 = null;
+  let DATA = null, ALL = [], ACTIVE = [], ARCH = [], SEL = null, SEL_PREV = null, LAND110 = null, LAND50 = null;
   const video = $("#v-video");
 
   // ------------------------------------------------------------------ theme (light unless chosen)
@@ -139,17 +139,17 @@
     $("#e-reset").addEventListener("click", () => EARTH.reset());
     EARTH.onSpinChange = spin;
   }
-  const sunInfo = () => {
-    const [lo, la] = subsolar(Date.now()), now = new Date();
+  const sunInfo = (t) => {
+    const ms = t === null || t === undefined ? Date.now() : t, [lo, la] = subsolar(ms), now = new Date(ms);
     const box = $("#sun-info"); if (!box) return; box.textContent = "";
     box.append(el("span", { text: "Sun directly overhead at " }), el("b", { text: ll(la, lo) }),
-      el("span", { text: ` · ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())} UTC · updates every minute` }));
+      el("span", { text: ` · ${t === null || t === undefined ? "" : `${now.getUTCDate()} ${MON[now.getUTCMonth()]} `}${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())} UTC${t === null || t === undefined ? " · live" : " · replay"}` }));
   };
-  sunInfo(); setInterval(sunInfo, 60000);
+  sunInfo(); setInterval(() => { if (RP.t === null) sunInfo(); }, 30000);
   function drawGlobe() {
     if (EARTH) {
       EARTH.setStorms(ACTIVE.map((s) => ({ key: s.key, name: s.name, kt: s.vmax_kt, south: s._south, color: col(s.vmax_kt),
-        pts: s._pts.map((p) => ({ lat: p.lat, lon: p.lon, color: col(p.kt) })) })), SEL && SEL.key);
+        pts: s._pts.map((p) => ({ lat: p.lat, lon: p.lon, t: p.t, kt: p.kt, color: col(p.kt) })) })), SEL && SEL.key);
       return;
     }
     G.proj.rotate(G.rot);
@@ -206,7 +206,8 @@
     const top = ACTIVE.length ? ACTIVE.reduce((a, b) => (b.vmax_kt > a.vmax_kt ? b : a)) : null;
     for (const [k, v] of [["Active storms", n], ["Strongest now", top ? `${top.name}, ${top.vmax_kt} kt` : "—"],
       ["ACE of active storms", ACTIVE.reduce((a, s) => a + s._ace, 0).toFixed(1)], ["Basins", new Set(ACTIVE.map((s) => s.basin_name)).size]])
-      st.append(el("div", {}, [el("dt", { text: k }), el("dd", { text: String(v), title: String(v) })]));
+      st.append(el("div", {}, [el("dt", { text: k }), el("dd", Object.assign({ text: String(v), title: String(v) },
+        typeof v === "number" || /^\d+(\.\d+)?$/.test(String(v)) ? { "data-count": String(v), "data-dp": String(v).includes(".") ? "1" : "0" } : {}))]));
     const ol = $("#storm-list"); ol.textContent = "";
     for (const s of ACTIVE) {
       const trend = s.dv24 >= 10 ? `▲ ${s.dv24} kt in 24 h` : s.dv24 <= -10 ? `▼ ${-s.dv24} kt in 24 h` : "steady";
@@ -222,6 +223,69 @@
     if (ALL.length) set("#site-stats", `This site holds videos of ${ALL.length} storm${ALL.length > 1 ? "s" : ""} from ${basins.size} basin${basins.size > 1 ? "s" : ""}.`);
   }
 
+  // ================================================================== DYNAMIC HELPERS
+  function countUp(root) {
+    if (!root) return;
+    for (const n of root.querySelectorAll("[data-count]")) {
+      if (n.dataset.done) continue; n.dataset.done = "1";
+      const to = +n.dataset.count, dp = +(n.dataset.dp || 0), suf = n.dataset.suffix || "";
+      if (reduced || !isFinite(to)) { n.textContent = to.toFixed(dp) + suf; continue; }
+      const t0 = performance.now(), dur = 1100;
+      const tick = (now) => { const a = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - a, 3); n.textContent = (to * e).toFixed(dp) + suf; if (a < 1) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    }
+  }
+  const clock = () => { const d = new Date(); set("#live-clock", `Live ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`); };
+  clock(); setInterval(clock, 1000);
+  function buildTicker() {
+    const tr = $("#ticker"); if (!tr) return; tr.textContent = "";
+    const items = [];
+    for (const s of ACTIVE) {
+      const parts = [el("b", { text: s.name }), ` ${s.vmax_kt} kt, ${catName(s.vmax_kt).toLowerCase()}`];
+      if (s.dv24 !== null && s.dv24 !== undefined && Math.abs(s.dv24) >= 5) parts.push(" · ", el("i", { text: `${s.dv24 > 0 ? "+" : ""}${s.dv24} kt in 24 h` }));
+      if (s.motion) parts.push(` · ${s.motion}`);
+      if (s.ri) parts.push(" · ", el("i", { text: "rapid intensification" }));
+      parts.push(` · ${s.basin_name}`);
+      items.push(el("span", {}, parts));
+    }
+    const [lo, la] = subsolar(Date.now()); items.push(el("span", {}, ["Sun overhead at ", el("b", { text: ll(la, lo) })]));
+    if (ARCH.length) items.push(el("span", { text: `${ARCH.length} storm${ARCH.length > 1 ? "s" : ""} in the archive` }));
+    for (const it of items) tr.append(it);
+    tr.style.animationDuration = `${Math.max(28, tr.textContent.length * 0.22)}s`;
+  }
+
+  // ---- globe replay: storms move along their tracks while day and night sweep the planet
+  const RP = { t0: 0, t1: 0, t: null, playing: false, last: 0 };
+  const rPlay = $("#r-play"), rRange = $("#r-range");
+  const rLabel = () => { rPlay.textContent = RP.playing ? "❚❚ Pause" : RP.t === null || RP.t >= RP.t1 ? `▶ Replay the last ${Math.max(1, Math.round((RP.t1 - RP.t0) / 864e5))} days` : "▶ Resume"; };
+  function replaySetup() {
+    if (!EARTH || !ACTIVE.length) { const r = $(".replay"); if (r) r.hidden = true; return; }
+    const first = Math.min(...ACTIVE.map((s) => (s._pts.length ? s._pts[0].t : Infinity)));
+    const last = Math.max(...ACTIVE.map((s) => (s._pts.length ? s._pts[s._pts.length - 1].t : -Infinity)));
+    RP.t1 = isFinite(last) ? Math.min(last, Date.now()) : Date.now();                  // ends at the latest advisory
+    RP.t0 = Math.max(isFinite(first) ? first : RP.t1 - 3 * 864e5, RP.t1 - 8 * 864e5); rLabel();
+  }
+  function replayShow(t) {
+    RP.t = t; if (EARTH) EARTH.setTime(t);
+    rRange.value = t === null ? 1000 : Math.round((t - RP.t0) / Math.max(1, RP.t1 - RP.t0) * 1000);
+    set("#r-time", t === null ? "Now" : fmt(t)); sunInfo(t); rLabel();
+  }
+  function replayLoop(now) {
+    if (!RP.playing) return;
+    const dt = Math.min(0.3, (now - (RP.last || now)) / 1000); RP.last = now;
+    let t = (RP.t === null ? RP.t0 : RP.t) + (RP.t1 - RP.t0) * dt / 14;          // the whole replay takes about 14 s
+    if (t >= RP.t1) { RP.playing = false; replayShow(RP.t1); setTimeout(() => { if (!RP.playing) replayShow(null); }, 1800); return; }
+    replayShow(t); requestAnimationFrame(replayLoop);
+  }
+  function replayPlay() {
+    if (RP.playing) { RP.playing = false; rLabel(); return; }
+    if (RP.t === null || RP.t >= RP.t1) RP.t = RP.t0;
+    RP.playing = true; RP.last = 0; rLabel(); requestAnimationFrame(replayLoop);
+  }
+  rPlay.addEventListener("click", replayPlay);
+  rRange.addEventListener("input", () => { RP.playing = false; const v = +rRange.value; replayShow(v >= 1000 ? null : RP.t0 + v / 1000 * (RP.t1 - RP.t0)); });
+  $("#r-live").addEventListener("click", () => { RP.playing = false; replayShow(null); });
+
   // ================================================================== OPENING (full-screen video)
   function setupOpening() {
     const hero = DATA && DATA.hero;
@@ -234,15 +298,33 @@
     cta.addEventListener("click", (e) => { e.preventDefault(); select(top, { scroll: true, autoplay: true }); });
   }
   // header turns solid once the opening scrolls away
-  const bar = $("#bar"); const onScroll = () => bar.classList.toggle("solid", window.scrollY > 40);
-  window.addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  const bar = $("#bar"), cine = $(".cine"), prog = $("#progress");
+  const navSecs = ["earth", "viewer", "compare", "season", "archive", "about"].map((id) => [id, $(`#${id}`), $(`.bar nav a[href="#${id}"]`)]);
+  let ticking = false, earthSeen = false;
+  const onScroll = () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false; const y = window.scrollY, vh = window.innerHeight;
+      bar.classList.toggle("solid", y > 40);
+      if (!reduced && cine) cine.style.setProperty("--p", Math.min(1, Math.max(0, y / vh)).toFixed(3));   // opening parallax
+      const max = document.documentElement.scrollHeight - vh; if (prog) prog.style.width = `${max > 0 ? (y / max) * 100 : 0}%`;
+      let cur = null; for (const [id, sec] of navSecs) if (sec && sec.getBoundingClientRect().top < vh * 0.35) cur = id;
+      for (const [id, , a] of navSecs) if (a) a.classList.toggle("on", id === cur);
+      const es = $("#earth");                                    // first arrival at the globe: count up and replay once
+      if (!earthSeen && DATA && es && es.getBoundingClientRect().top < vh * 0.55) {
+        earthSeen = true; countUp($("#stats"));
+        if (EARTH && ACTIVE.length && !reduced) setTimeout(() => { if (RP.t === null && !RP.playing) replayPlay(); }, 700);
+      }
+    });
+  };
+  window.addEventListener("scroll", onScroll, { passive: true }); window.addEventListener("resize", onScroll); onScroll();
   // sections fade in as they arrive
   // (a plain position check rather than IntersectionObserver, so content can never stay hidden)
   const pendingReveal = [...document.querySelectorAll(".reveal")];
   const reveal = () => {
     for (let i = pendingReveal.length - 1; i >= 0; i--) {
       const n = pendingReveal[i];
-      if (reduced || n.getBoundingClientRect().top < window.innerHeight * 0.92) { n.classList.add("in"); pendingReveal.splice(i, 1); }
+      if (reduced || n.getBoundingClientRect().top < window.innerHeight * 0.92) { n.classList.add("in"); pendingReveal.splice(i, 1); countUp(n); }
     }
     if (!pendingReveal.length) window.removeEventListener("scroll", reveal);
   };
@@ -541,6 +623,8 @@
       tags.append(el("span", { class: `tag${rapid ? " ri" : ""}`, text: `${cap(s.trend)}, ${s.dv24 > 0 ? "+" : ""}${s.dv24} kt in 24 h` }));
     if (s.ri && !rapid) tags.append(el("span", { class: "tag ri", text: s.status === "active" ? "Rapid intensification earlier" : "Rapid intensification" }));
     if (s.status !== "active") tags.append(el("span", { class: "tag", text: `Peak ${s.peak_kt} kt` }));
+    const vg = $(".v-grid"); if (vg && !reduced && SEL_PREV && SEL_PREV !== s) { vg.classList.add("swap"); setTimeout(() => vg.classList.remove("swap"), 80); }
+    SEL_PREV = s;
     video.poster = s.poster; video.src = s.video; video.load(); video.playbackRate = +$("#c-speed").value;
     if (opts.autoplay && !reduced) video.play().catch(() => {});
     updPlay(); fillTabs(s); drawScrub(s); M.s = null; drawMap(s); loadEnv(s); sync(); drawGlobe();
@@ -648,12 +732,12 @@
     if (!S.length) { ace.append(el("p", { class: "muted", text: "No storms rendered yet this year." })); return; }
     const byB = d3.rollups(S, (v) => d3.sum(v, (s) => s._ace), (s) => s.basin_name).sort((a, b) => b[1] - a[1]);
     const mx = d3.max(byB, (d) => d[1]) || 1;
-    for (const [b, v] of byB) ace.append(el("div", { class: "hbar" }, [el("span", { text: b }), el("div", { style: `width:${Math.max(2, v / mx * 100)}%` }), el("b", { text: v.toFixed(1) })]));
+    for (const [b, v] of byB) ace.append(el("div", { class: "hbar" }, [el("span", { text: b }), el("div", { style: `width:${Math.max(2, v / mx * 100)}%` }), el("b", { text: v.toFixed(1), "data-count": v.toFixed(1), "data-dp": "1" })]));
     const groups = [["TD", 0, 34, "--td"], ["TS", 34, 64, "--ts"], ["1", 64, 83, "--c1"], ["2", 83, 96, "--c2"], ["3", 96, 113, "--c3"], ["4", 113, 137, "--c4"], ["5", 137, 999, "--c5"]];
     const counts = groups.map(([n, a, b, c]) => [n, S.filter((s) => s.peak_kt >= a && s.peak_kt < b).length, c]);
     const cm = Math.max(1, ...counts.map((c) => c[1]));
     const bars = el("div", { class: "catbars", role: "img", "aria-label": counts.map((c) => `${c[0]}: ${c[1]}`).join(", ") });
-    for (const [n, k, c] of counts) bars.append(el("div", {}, [el("b", { text: k }), el("i", { style: `height:${k / cm * 100}%;--c:var(${c})` }), el("span", { text: n })]));
+    for (const [n, k, c] of counts) bars.append(el("div", {}, [el("b", { text: k, "data-count": String(k) }), el("i", { style: `height:${k / cm * 100}%;--c:var(${c})` }), el("span", { text: n })]));
     cat.append(bars);
     for (const s of S.slice().sort((a, b) => b.peak_kt - a.peak_kt).slice(0, 6)) {
       const b = el("button", { type: "button", text: `${s.name}` }); b.addEventListener("click", () => select(s, { scroll: true }));
@@ -669,9 +753,15 @@
     list.sort(sort === "peak" ? (p, q) => q.peak_kt - p.peak_kt : sort === "ace" ? (p, q) => q._ace - p._ace : (p, q) => toMs(q.last_seen) - toMs(p.last_seen));
     if (!list.length) { box.append(el("p", { class: "empty", text: ARCH.length ? "No storms match these filters." : "Storms appear here after they dissipate." })); return; }
     for (const s of list) {
-      const c = el("button", { type: "button", class: "card", style: `--c:var(${CATV(s.peak_kt)})` }, [el("img", { src: s.poster, alt: "", loading: "lazy" }),
+      const wrap = el("span", { class: "imgwrap" }, [el("img", { src: s.poster, alt: "", loading: "lazy" })]);
+      const c = el("button", { type: "button", class: "card", style: `--c:var(${CATV(s.peak_kt)})` }, [wrap,
         el("div", {}, [el("strong", { text: `${s.name} (${s.year})` }), el("span", { text: `${s.basin_name}, peak ${s.peak_kt} kt, ACE ${s._ace.toFixed(1)}${s.ri ? ", rapid intensification" : ""}` })])]);
       c.addEventListener("click", () => select(s, { scroll: true })); box.append(c);
+      if (!reduced && matchMedia("(hover: hover)").matches) {           // silent preview on hover
+        c.addEventListener("mouseenter", () => { if (wrap.querySelector("video")) return;
+          const v = el("video", { class: "prev", muted: true, loop: true, playsinline: true, src: s.video, preload: "auto" }); v.muted = true; wrap.append(v); v.play().catch(() => {}); });
+        c.addEventListener("mouseleave", () => { const v = wrap.querySelector("video"); if (v) { v.pause(); v.remove(); } });
+      }
     }
   }
   for (const id of ["#f-year", "#f-basin", "#f-sort"]) $(id).addEventListener("change", drawArchive);
@@ -702,7 +792,7 @@
       ARCH = ALL.filter((s) => s.status !== "active");
       for (const y of [...new Set(ARCH.map((s) => s.year))].sort().reverse()) $("#f-year").append(el("option", { value: y, text: y }));
       for (const b of [...new Set(ARCH.map((s) => s.basin_name))].sort()) $("#f-basin").append(el("option", { value: b, text: b }));
-      drawHero(); drawArchive(); drawSeason(); setupCompare(); setupOpening();
+      drawHero(); drawArchive(); drawSeason(); setupCompare(); setupOpening(); buildTicker(); replaySetup(); onScroll();
       const m = location.hash.match(/storm=([\w-]+)/);
       const first = (m && ALL.find((s) => s.key === m[1])) || ACTIVE[0] || ARCH.slice().sort((a, b) => toMs(b.last_seen) - toMs(a.last_seen))[0];
       if (first) select(first, { scroll: !!m, initial: true }); else set("#v-name", "No storms yet");
