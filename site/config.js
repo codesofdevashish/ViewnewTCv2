@@ -2,7 +2,7 @@
 window.SITE = {
   name: "Dev",
   role: "Tropical cyclone researcher",
-  affiliation: "Research Scholar, MEGHA Lab, IIT Hyderabad",
+  affiliation: "Research Scholar, IIT Hyderabad",
   summary:
     "I study how tropical cyclones intensify, with a focus on rapid intensification over the Bay of Bengal. " +
     "This site renders every active storm on Earth each day from GFS analyses, using the same 3D flow " +
@@ -12,7 +12,6 @@ window.SITE = {
     "Vortex alignment, vertical wind shear and tilt",
     "Diagnostics from reanalysis and operational model data",
   ],
-  memberships: ["Lifetime Member, Indian Meteorological Society"],
   links: {
     email: "",          // "you@example.com"
     scholar: "",        // Google Scholar profile URL
