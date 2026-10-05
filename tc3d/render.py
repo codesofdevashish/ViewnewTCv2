@@ -666,7 +666,9 @@ def _draw_frame(st):
     ctr, box, rmw = st["ctr"], st["box"], st["rmw"]
     cmap = plt.get_cmap("turbo"); norm = plt.Normalize(0, CFG["vmax"])
     dash = CFG["dashboard"]
-    main_rect = [0.0, 0.19, 0.70, 0.76] if dash else [0.02, 0.02, 0.84, 0.90]
+    clean = CFG.get("clean", False)                     # hero film: flow only, no axes, text or panels
+    if clean: dash = False
+    main_rect = [-0.10, -0.16, 1.20, 1.32] if clean else [0.0, 0.19, 0.70, 0.76] if dash else [0.02, 0.02, 0.84, 0.90]
     cb_rect   = [0.695, 0.30, 0.010, 0.56] if dash else [0.87, 0.11, 0.018, 0.82]
     F = Field(ds, it0, it1, a)
     shear = _interp(D["shear"], tf); tilt = _interp(D["tilt"], tf)
@@ -681,6 +683,7 @@ def _draw_frame(st):
         axis._axinfo["grid"].update(color=(0.30, 0.30, 0.30, 0.5), linewidth=0.5)
         axis.line.set_color("0.8")
     ax.tick_params(colors="0.85", labelsize=9)
+    if clean: ax.set_axis_off()
     ax.computed_zorder = False
     if CFG["show_basemap"]:
         draw_basemap(ax, box, max(CFG["levels"]), tnow)
@@ -737,7 +740,7 @@ def _draw_frame(st):
 
     (lo0, lo1), (la0, la1) = box
     ax.set_xlim(lo0, lo1); ax.set_ylim(la0, la1); ax.set_zlim(zf, min(CFG["levels"]))
-    ax.set_box_aspect((1, (la1 - la0) / (lo1 - lo0), 0.8), zoom=1.05)
+    ax.set_box_aspect((1, (la1 - la0) / (lo1 - lo0), 0.8), zoom=1.22 if clean else 1.05)
     xt = np.arange(np.ceil(lo0 / 2) * 2, lo1 + 0.01, 2); yt = np.arange(np.ceil(la0 / 2) * 2, la1 + 0.01, 2)
     ax.set_xticks(xt); ax.set_yticks(yt)
     ax.set_xticklabels([f"{abs(((x + 180) % 360) - 180):.0f}\u00b0" + ("" if abs(((x + 180) % 360) - 180) in (0, 180)
@@ -745,6 +748,11 @@ def _draw_frame(st):
     ax.set_yticklabels([f"{abs(y):.0f}\u00b0" + ("" if y == 0 else ("N" if y > 0 else "S")) for y in yt])
     ax.set_zticks(CFG["levels"])
     ph = fr / max(_CTX["nfr"] - 1, 1); e = 0.5 - 0.5 * np.cos(np.pi * ph)
+    if clean:                                           # slow, low cinematic orbit
+        ax.view_init(elev=20 - 8 * np.sin(np.pi * ph) ** 2, azim=-70 + 120 * e)
+        out = os.path.join(CFG["frame_dir"], f"f{fr:04d}.png")
+        fig.savefig(out, facecolor="black"); plt.close(fig)
+        return out
     ax.view_init(elev=28 - 20 * np.sin(np.pi * ph) ** 2, azim=-60 + 330 * e)
 
     cax = fig.add_axes(cb_rect)

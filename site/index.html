@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -12,38 +12,57 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=__BUILD__">
-<script>try{const t=localStorage.getItem("tc-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 <a class="skip" href="#viewer">Skip to the storm viewer</a>
 <div id="banner" class="banner" role="alert" hidden></div>
 
-<header class="bar">
+<header class="bar" id="bar">
   <a class="brand" href="#top"><span class="swirl" aria-hidden="true"></span><span id="brand-name">Tropical cyclones</span></a>
   <nav aria-label="Sections">
-    <a href="#viewer">Viewer</a><a href="#compare">Compare</a><a href="#season">Season</a><a href="#archive">Archive</a><a href="#about">About</a>
+    <a href="#earth">Earth</a><a href="#viewer">Viewer</a><a href="#compare">Compare</a><a href="#season">Season</a><a href="#archive">Archive</a><a href="#about">About</a>
   </nav>
-  <button id="theme" class="theme" type="button">Dark mode</button>
 </header>
 
-<main id="top">
-  <!-- ================= HERO: the Earth right now ================= -->
-  <section class="hero">
-    <div class="hero-text">
+<main>
+  <!-- ================= OPENING: the strongest storm, full screen ================= -->
+  <section class="cine" id="top">
+    <video id="hero-video" muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"></video>
+    <div class="cine-shade" aria-hidden="true"></div>
+    <div class="cine-text">
       <p class="eyebrow">Rebuilt every morning from GFS analyses</p>
-      <h1 id="headline">Tropical cyclones right now</h1>
-      <p id="status" class="status">Loading the latest analysis…</p>
-      <dl class="stats" id="stats"></dl>
-      <ol class="storm-list" id="storm-list" aria-label="Active storms"></ol>
+      <h1>Every tropical cyclone on Earth, <span class="accent">in three dimensions</span></h1>
+      <p id="headline" class="cine-live">Loading the latest analysis…</p>
+      <p id="status" class="status"></p>
+      <p class="cine-cta"><a class="btn" href="#viewer" id="cta-watch">Open the storm viewer</a><a class="btn ghost" href="#earth">See the planet</a></p>
     </div>
-    <figure class="globe-wrap">
-      <svg id="globe" role="img" aria-label="Globe showing active tropical cyclones and the current day and night"></svg>
-      <figcaption>Drag to turn the globe. The shaded half is night right now.</figcaption>
-    </figure>
+    <ol class="storm-list" id="storm-list" aria-label="Active storms"></ol>
+    <a class="cue" href="#earth" aria-label="Scroll to the globe"><span></span></a>
+  </section>
+
+  <!-- ================= THE PLANET RIGHT NOW ================= -->
+  <section class="earth-sec" id="earth">
+    <div class="earth-stage">
+      <canvas id="earth-canvas" aria-label="3D Earth with the current day and night and the tracks of active tropical cyclones" role="img"></canvas>
+      <div id="earth-labels" class="earth-labels"></div>
+      <svg id="globe" hidden role="img" aria-label="Globe showing active tropical cyclones and the current day and night"></svg>
+    </div>
+    <div class="earth-ui">
+      <p class="eyebrow">The planet right now</p>
+      <h2>Day, night and every active storm</h2>
+      <p class="lede">Sunlight falls where it does at this moment; city lights mark the night side. Drag to turn the Earth, select a storm to open it.</p>
+      <dl class="stats" id="stats"></dl>
+      <p class="earth-zoom"><button type="button" id="e-in" class="btn ghost" aria-label="Zoom in">+</button><button type="button" id="e-out" class="btn ghost" aria-label="Zoom out">−</button>
+        <span class="hint">or Ctrl + scroll</span></p>
+      <ol class="legend" aria-label="Intensity colours">
+        <li><i style="--c:var(--td)"></i>TD</li><li><i style="--c:var(--ts)"></i>TS</li><li><i style="--c:var(--c1)"></i>Cat 1</li>
+        <li><i style="--c:var(--c2)"></i>2</li><li><i style="--c:var(--c3)"></i>3</li><li><i style="--c:var(--c4)"></i>4</li><li><i style="--c:var(--c5)"></i>5</li>
+      </ol>
+    </div>
   </section>
 
   <!-- ================= STORM VIEWER ================= -->
-  <section id="viewer" class="viewer-sec">
+  <section id="viewer" class="viewer-sec reveal">
     <div class="v-head">
       <div class="v-title">
         <p class="kicker" id="v-kicker"></p>
@@ -123,7 +142,7 @@
   </section>
 
   <!-- ================= COMPARE ================= -->
-  <section id="compare" class="block">
+  <section id="compare" class="block reveal">
     <div class="block-head">
       <div><h2>Compare two storms</h2>
         <p class="lede">Play two storms side by side from the start of their videos, for example one that intensified rapidly and one that did not.</p></div>
@@ -141,7 +160,7 @@
   </section>
 
   <!-- ================= SEASON ================= -->
-  <section id="season" class="block">
+  <section id="season" class="block reveal">
     <div class="block-head"><div><h2 id="season-title">Season at a glance</h2>
       <p class="lede">Built from every storm this site has rendered this year.</p></div></div>
     <div class="season-grid">
@@ -152,7 +171,7 @@
   </section>
 
   <!-- ================= ARCHIVE ================= -->
-  <section id="archive" class="block">
+  <section id="archive" class="block reveal">
     <div class="block-head">
       <div><h2>Archive</h2><p class="lede">The last video made for each storm after it dissipated. Choose one to open it in the viewer.</p></div>
       <div class="cmp-ctl">
@@ -165,7 +184,7 @@
   </section>
 
   <!-- ================= GUIDE ================= -->
-  <section id="guide" class="block">
+  <section id="guide" class="block reveal">
     <div class="block-head"><div><h2>How to read a video</h2><p class="lede">Select a numbered marker to see what that part of the frame shows.</p></div></div>
     <div class="guide">
       <div class="guide-frame" id="guide-frame"><img id="guide-img" alt="A frame from one of the storm videos"></div>
@@ -174,7 +193,7 @@
   </section>
 
   <!-- ================= ABOUT ================= -->
-  <section id="about" class="block about">
+  <section id="about" class="block about reveal">
     <div class="about-grid">
       <div>
         <p class="eyebrow">About</p>
@@ -194,15 +213,17 @@
 </main>
 
 <footer class="foot">
-  <p>Data: NCEP GFS 0.25° analyses and NCEP TCVitals (operational positions and intensities from NHC, CPHC, JTWC and other centres). Coastlines: Natural Earth via world-atlas. Globe and maps: d3.</p>
+  <p>Data: NCEP GFS 0.25° analyses and NCEP TCVitals (operational positions and intensities from NHC, CPHC, JTWC and other centres). Earth imagery: NASA Blue Marble and Black Marble. Coastlines: Natural Earth via world-atlas. Rendering: three.js and d3.</p>
   <p>Research visualisation, not an official forecast. For warnings, follow your national meteorological service.</p>
   <p id="generated"></p>
 </footer>
 
 <noscript><p class="banner">This site needs JavaScript to show the storms.</p></noscript>
+<script src="vendor/three.min.js"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/topojson-client.min.js"></script>
 <script src="config.js?v=__BUILD__"></script>
+<script src="earth.js?v=__BUILD__"></script>
 <script src="app.js?v=__BUILD__"></script>
 </body>
 </html>

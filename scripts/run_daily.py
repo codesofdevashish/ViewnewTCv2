@@ -32,7 +32,7 @@ def _domain(track, pad=9.0, min_span=22.0):
     return (round(la0), round(la1)), (math.floor(lo0), math.ceil(lo1)), bool(use360)
 
 
-def render_storm(st, latest, work, public, max_days):
+def render_storm(st, latest, work, public, max_days, hero=False):
     key = st["key"]; wdir = os.path.join(work, key)
     t_end = min(st["last_seen"], latest).floor("3h")
     t_start = max(st["first_seen"].floor("3h"), t_end - pd.Timedelta(days=max_days))
@@ -60,6 +60,19 @@ def render_storm(st, latest, work, public, max_days):
         R.LAST_DIAG = None
         R.render(ds)
         tt = pd.to_datetime(ds.time.values)
+        diag_keep = R.LAST_DIAG
+        if hero:                                   # cinematic backdrop for the opening of the site
+            try:
+                saved = {k: R.CFG[k] for k in ("clean", "figsize", "dpi", "frame_dir", "out_mp4", "out_poster", "out_diag", "show_tilt", "show_shear") if k in R.CFG}
+                R.CFG.update(clean=True, figsize=(16, 9), dpi=120, frame_dir=os.path.join(wdir, "hero_frames"),
+                             out_mp4=os.path.join(public, "videos", "hero.mp4"), out_poster=os.path.join(public, "videos", "hero.jpg"),
+                             out_diag=None, show_tilt=False, show_shear=False)
+                R._CTX.clear(); R.render(ds)
+                print("  hero film written")
+            except Exception:
+                traceback.print_exc()
+            finally:
+                R.CFG.update(saved); R.CFG["clean"] = False; R.LAST_DIAG = diag_keep
         return dict(window_start=tt[0].strftime("%Y-%m-%dT%H:%MZ"), window_end=tt[-1].strftime("%Y-%m-%dT%H:%MZ"))
     finally:
         shutil.rmtree(wdir, ignore_errors=True)                 # delete data + frames immediately
@@ -102,11 +115,12 @@ def main():
     sess = requests.Session(); sess.headers["User-Agent"] = "tc3d-site/1.0"
 
     # previous site data (for the archive and as a fallback if a render fails)
-    prev = {}
+    prev = {}; prev_hero = None
     if a.site_url:
         try:
             r = sess.get(a.site_url.rstrip("/") + "/data/storms.json", timeout=30)
-            if r.ok: prev = {s["key"]: s for s in r.json().get("storms", [])}
+            if r.ok:
+                pj = r.json(); prev = {s["key"]: s for s in pj.get("storms", [])}; prev_hero = pj.get("hero")
         except Exception as e:
             print("no previous site data:", e)
 
@@ -154,13 +168,13 @@ def main():
                     **({"diag": f"data/storms/{st['key']}.json"} if os.path.exists(os.path.join(a.public, "data", "storms", f"{st['key']}.json")) else {}),
                     **info)
 
-    def make(st, status):
+    def make(st, status, hero=False):
         """Render (or, if that fails, copy yesterday's video) and describe one storm."""
         ended_ = status == "archived"
         print(f"\n=== {st['key']}  {st['label']} {st['name']}  {st['vmax_kt']} kt  ({status}) ===")
         t0 = time.time(); info = {}
         try:
-            info = render_storm(st, latest, a.work, a.public, a.max_days); ok = True
+            info = render_storm(st, latest, a.work, a.public, a.max_days, hero=hero); ok = True
         except Exception:
             traceback.print_exc(); ok = st["key"] in prev and carry(prev[st["key"]])
         if not ok:
@@ -178,9 +192,12 @@ def main():
         return entry(st, info, desc, status)
 
     out = []
-    for st in active:
-        e = make(st, "active")
+    for n, st in enumerate(active):
+        e = make(st, "active", hero=(n == 0))
         if e: out.append(e)
+    hero = None
+    if os.path.exists(os.path.join(a.public, "videos", "hero.mp4")) and active:
+        hero = dict(key=active[0]["key"], name=active[0]["name"], video="videos/hero.mp4", poster="videos/hero.jpg")
 
     # archive 1: storms that ended in the last 8 days (from TCVitals history, so this works on a new site)
     done = {s["key"] for s in out}
@@ -211,7 +228,17 @@ def main():
         if carry(s):
             s["status"] = "archived"; out.append(s)
 
-    json.dump(dict(generated=pd.Timestamp.now("UTC").strftime("%Y-%m-%dT%H:%MZ"),
+    if hero is None and prev_hero and a.site_url:          # nothing active today: keep yesterday's opening film
+        try:
+            ok = True
+            for ext in ("mp4", "jpg"):
+                r = sess.get(a.site_url.rstrip("/") + f"/videos/hero.{ext}", timeout=120)
+                if r.ok: open(os.path.join(a.public, "videos", f"hero.{ext}"), "wb").write(r.content)
+                else: ok = False
+            if ok: hero = prev_hero
+        except Exception:
+            pass
+    json.dump(dict(hero=hero, generated=pd.Timestamp.now("UTC").strftime("%Y-%m-%dT%H:%MZ"),
                    latest_cycle=str(latest) if latest is not None else None, storms=out),
               open(os.path.join(a.public, "data", "storms.json"), "w"), indent=1)
     shutil.rmtree(a.work, ignore_errors=True)

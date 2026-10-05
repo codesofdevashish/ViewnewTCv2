@@ -1,7 +1,7 @@
 # Tropical cyclones in 3D, updated daily
 
-A GitHub Pages site (https://codesofdevashish.github.io/ViewnewTCv2) that shows a 3D flow animation for every active tropical cyclone on Earth,
-rebuilt every morning by GitHub Actions.
+A GitHub Pages site that shows a 3D flow animation for every active tropical cyclone on Earth,
+rebuilt every morning by GitHub Actions. It also serves as a portfolio page (edit `site/config.js`).
 
 **What happens each day** (`.github/workflows/update.yml`, 06:40 UTC)
 
@@ -16,6 +16,13 @@ rebuilt every morning by GitHub Actions.
 
 ## The website
 
+- **Cinematic opening**: every day the strongest active storm is also rendered as a clean 1920×1080
+  film (flow, vortex core and day/night floor only, slow orbiting camera) that plays full screen
+  behind the title.
+- **3D Earth (WebGL, three.js)**: NASA Blue Marble by day and Black Marble city lights by night,
+  blended along the real terminator, with ocean sun glint, atmosphere and stars. Storm tracks glow
+  in Saffir–Simpson colours, storms spin in their hemisphere's direction; drag to turn, click a
+  storm to open it. Falls back to a flat d3 globe on devices without WebGL.
 - **Storm viewer**: the official intensity curve *is* the video timeline. Drag along it to scrub,
   step ±1 h, change speed. Live cards show frame time, wind, stage and centre, and a regional map
   moves the storm (and the night side) with the video. Tabs: written overview, structure gauges,
@@ -30,6 +37,27 @@ rebuilt every morning by GitHub Actions.
 - Everything the page needs (d3, topojson, Natural Earth land) is in `site/vendor/`, and each
   daily build stamps the script and stylesheet URLs so browsers never run an old copy.
 
+## Set up (once)
+
+1. Create a **public** repository on GitHub and push these files to it.
+2. Repository **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. **Actions → Daily cyclone videos → Run workflow** to build the site the first time
+   (about 5–10 min per active storm). After that it runs by itself every day.
+4. The site is at `https://<your-username>.github.io/<repo-name>/`.
+5. Edit `site/config.js` with your name, links and research interests, then commit.
+
+## Settings
+
+`scripts/run_daily.py` options (edit the command in the workflow):
+
+| option | default | meaning |
+|---|---|---|
+| `--max-days` | 5 | length of each video window |
+| `--max-storms` | 12 | most storms rendered per day (strongest first) |
+| `--archive-max` | 40 | number of past storms kept on the site |
+| `--include-invests` | off | also render invest areas |
+
+Look of the videos: `CFG` at the top of `tc3d/render.py`.
 
 ## Notes
 

@@ -90,19 +90,8 @@
   const video = $("#v-video");
 
   // ------------------------------------------------------------------ theme (light unless chosen)
-  const themeBtn = $("#theme");
-  const dark = () => document.documentElement.dataset.theme === "dark";
-  const themeLabel = () => {
-    themeBtn.textContent = ""; const lab = dark() ? "Light mode" : "Dark mode";
-    themeBtn.append(el("span", { "aria-hidden": "true", text: "◐" }), el("span", { class: "tl", text: ` ${lab}` }));
-    themeBtn.setAttribute("aria-label", `Switch to ${lab.toLowerCase()}`);
-  };
-  themeBtn.addEventListener("click", () => {
-    document.documentElement.dataset.theme = dark() ? "light" : "dark";
-    try { localStorage.setItem("tc-theme", document.documentElement.dataset.theme); } catch (e) { /* ignore */ }
-    themeLabel(); drawGlobe(); if (SEL) { drawScrub(SEL); drawMap(SEL); drawEnv(); sync(); } drawCompareCharts(); drawSeason();
-  });
-  themeLabel();
+  // cinematic: dark theme only
+  document.documentElement.dataset.theme = "dark";
 
   // ------------------------------------------------------------------ profile
   set("#brand-name", CONF.name || "Tropical cyclones");
@@ -135,7 +124,18 @@
   G.tracks = G.svg.append("g");
   G.storms = G.svg.append("g");
   G.rim = G.svg.append("path").attr("class", "g-rim").datum({ type: "Sphere" });
+  const EARTH = window.Earth ? window.Earth.create($("#earth-canvas"), {
+    labels: $("#earth-labels"), onSelect: (k) => { const s = ALL.find((x) => x.key === k); if (s) select(s, { scroll: true }); } }) : null;
+  if (!EARTH) { $("#globe").hidden = false; $("#earth-canvas").hidden = true; }
+  $("#e-in").addEventListener("click", () => EARTH ? EARTH.zoomIn() : null);
+  $("#e-out").addEventListener("click", () => EARTH ? EARTH.zoomOut() : null);
+  if (!EARTH) { $("#e-in").hidden = true; $("#e-out").hidden = true; }
   function drawGlobe() {
+    if (EARTH) {
+      EARTH.setStorms(ACTIVE.map((s) => ({ key: s.key, name: s.name, kt: s.vmax_kt, south: s._south, color: col(s.vmax_kt),
+        pts: s._pts.map((p) => ({ lat: p.lat, lon: p.lon, color: col(p.kt) })) })), SEL && SEL.key);
+      return;
+    }
     G.proj.rotate(G.rot);
     G.ocean.attr("d", G.path); G.grat.attr("d", G.path); G.rim.attr("d", G.path);
     if (LAND110) G.land.attr("d", G.path(LAND110));
@@ -162,6 +162,7 @@
     const k = 0.35; G.rot = [G.rot[0] + e.dx * k, Math.max(-75, Math.min(75, G.rot[1] - e.dy * k))]; drawGlobe();
   }).on("end", () => { G.userAt = performance.now(); }));
   function turnGlobeTo(lon, lat, ms = 900) {
+    if (EARTH) { EARTH.focus(lat, lon, 1400); return; }
     const from = G.rot.slice(), to = [-lon, Math.max(-60, Math.min(60, -lat))];
     let dl = to[0] - from[0]; while (dl > 180) dl -= 360; while (dl < -180) dl += 360; to[0] = from[0] + dl;
     const it = d3.interpolate(from, to); G.auto = false; G.userAt = performance.now();
@@ -169,13 +170,14 @@
     d3.transition().duration(ms).tween("rot", () => (t) => { G.rot = it(t); drawGlobe(); });
   }
   (function spinLoop() {
+    if (EARTH) return;
     if (!reduced) {
       if (!G.auto && G.userAt && performance.now() - G.userAt > 12000) G.auto = true;
       if (G.auto && document.visibilityState === "visible") { G.rot = [G.rot[0] + 0.06, G.rot[1]]; drawGlobe(); }
     }
     requestAnimationFrame(spinLoop);
   })();
-  setInterval(() => drawNight(G.night, G.path, Date.now()), 60000);
+  if (!EARTH) setInterval(() => drawNight(G.night, G.path, Date.now()), 60000);
 
   // ================================================================== HERO list + stats
   function drawHero() {
@@ -203,6 +205,33 @@
     const basins = new Set(ALL.map((s) => s.basin_name));
     if (ALL.length) set("#site-stats", `This site holds videos of ${ALL.length} storm${ALL.length > 1 ? "s" : ""} from ${basins.size} basin${basins.size > 1 ? "s" : ""}.`);
   }
+
+  // ================================================================== OPENING (full-screen video)
+  function setupOpening() {
+    const hero = DATA && DATA.hero;
+    const top = (hero && ALL.find((x) => x.key === hero.key)) || ACTIVE[0] || ARCH.slice().sort((a, b) => toMs(b.last_seen) - toMs(a.last_seen))[0];
+    const hv = $("#hero-video"); if (!top || !hv) return;
+    if (hero && hero.video) { hv.poster = hero.poster; hv.src = hero.video; hv.classList.remove("raw"); }
+    else { hv.poster = top.poster; hv.src = top.video; hv.classList.add("raw"); }   // no clean film yet: crop onto the 3D flow
+    if (!reduced) hv.play().catch(() => {});
+    const cta = $("#cta-watch"); cta.textContent = `Watch ${top.name}`;
+    cta.addEventListener("click", (e) => { e.preventDefault(); select(top, { scroll: true, autoplay: true }); });
+  }
+  // header turns solid once the opening scrolls away
+  const bar = $("#bar"); const onScroll = () => bar.classList.toggle("solid", window.scrollY > 40);
+  window.addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  // sections fade in as they arrive
+  // (a plain position check rather than IntersectionObserver, so content can never stay hidden)
+  const pendingReveal = [...document.querySelectorAll(".reveal")];
+  const reveal = () => {
+    for (let i = pendingReveal.length - 1; i >= 0; i--) {
+      const n = pendingReveal[i];
+      if (reduced || n.getBoundingClientRect().top < window.innerHeight * 0.92) { n.classList.add("in"); pendingReveal.splice(i, 1); }
+    }
+    if (!pendingReveal.length) window.removeEventListener("scroll", reveal);
+  };
+  window.addEventListener("scroll", reveal, { passive: true }); window.addEventListener("resize", reveal); reveal();
+  window.addEventListener("hashchange", () => setTimeout(reveal, 50));
 
   // ================================================================== VIEWER
   const playBtn = $("#c-play"), bigPlay = $("#big-play");
@@ -503,7 +532,15 @@
     const nl = navList(); $("#prev").disabled = nl.length < 2; $("#next").disabled = nl.length < 2;
     try { history.replaceState(null, "", `#storm=${s.key}`); } catch (e) { /* ignore */ }
     if (!$("#guide-img").getAttribute("src")) $("#guide-img").src = s.poster;
-    if (s._pts.length) { const l = s._pts[s._pts.length - 1]; turnGlobeTo(l.lon, l.lat); }
+    if (s._pts.length) {
+      const l = s._pts[s._pts.length - 1];
+      if (opts.initial && EARTH) {                // first view: frame the storm together with the sunlit side
+        const [slo, sla] = subsolar(Date.now()), r = Math.PI / 180;
+        const v = (la, lo) => [Math.cos(la * r) * Math.cos(lo * r), Math.cos(la * r) * Math.sin(lo * r), Math.sin(la * r)];
+        const a = v(l.lat, l.lon), b = v(sla, slo), t = 0.42, m = a.map((x, i) => x * (1 - t) + b[i] * t), n = Math.hypot(...m);
+        EARTH.focus(Math.asin(m[2] / n) / r, Math.atan2(m[1], m[0]) / r, 1);
+      } else turnGlobeTo(l.lon, l.lat);
+    }
     if (opts.scroll) $("#viewer").scrollIntoView({ behavior: reduced ? "auto" : "smooth" });
   }
   const move = (d) => { const nl = navList(); if (nl.length < 2 || !SEL) return; const i = nl.indexOf(SEL); select(nl[(i + d + nl.length) % nl.length]); };
@@ -649,10 +686,10 @@
       ARCH = ALL.filter((s) => s.status !== "active");
       for (const y of [...new Set(ARCH.map((s) => s.year))].sort().reverse()) $("#f-year").append(el("option", { value: y, text: y }));
       for (const b of [...new Set(ARCH.map((s) => s.basin_name))].sort()) $("#f-basin").append(el("option", { value: b, text: b }));
-      drawHero(); drawArchive(); drawSeason(); setupCompare();
+      drawHero(); drawArchive(); drawSeason(); setupCompare(); setupOpening();
       const m = location.hash.match(/storm=([\w-]+)/);
       const first = (m && ALL.find((s) => s.key === m[1])) || ACTIVE[0] || ARCH.slice().sort((a, b) => toMs(b.last_seen) - toMs(a.last_seen))[0];
-      if (first) select(first, { scroll: !!m }); else set("#v-name", "No storms yet");
+      if (first) select(first, { scroll: !!m, initial: true }); else set("#v-name", "No storms yet");
       drawGlobe();
       land("land-50m.json").then((g) => { if (g) { LAND50 = g; if (SEL) drawMap(SEL); } });
     })
