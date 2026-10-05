@@ -50,10 +50,17 @@
     <div class="earth-ui">
       <p class="eyebrow">The planet right now</p>
       <h2>Day, night and every active storm</h2>
-      <p class="lede">Sunlight falls where it does at this moment; city lights mark the night side. Drag to turn the Earth, select a storm to open it.</p>
+      <p class="lede">The Earth as it is lit at this moment: daylight where the Sun is up, city lights on the night side. Select a storm to open it.</p>
       <dl class="stats" id="stats"></dl>
-      <p class="earth-zoom"><button type="button" id="e-in" class="btn ghost" aria-label="Zoom in">+</button><button type="button" id="e-out" class="btn ghost" aria-label="Zoom out">−</button>
-        <span class="hint">or Ctrl + scroll</span></p>
+      <p class="daynight"><span class="dn-key"><i class="d"></i>Day side</span><span class="dn-key"><i class="n"></i>Night side (city lights)</span>
+        <span class="dn-key"><i class="t"></i>Day–night line</span></p>
+      <p class="daynight" id="sun-info"></p>
+      <p class="earth-zoom">
+        <button type="button" id="e-in" class="btn ghost" aria-label="Zoom in">+</button><button type="button" id="e-out" class="btn ghost" aria-label="Zoom out">−</button>
+        <button type="button" id="e-spin" class="btn ghost wide" aria-pressed="false">Spin</button>
+        <button type="button" id="e-reset" class="btn ghost wide">Reset view</button>
+      </p>
+      <p class="hint">Drag to turn and tilt the Earth (or use the arrow keys after clicking it). Ctrl + scroll to zoom.</p>
       <ol class="legend" aria-label="Intensity colours">
         <li><i style="--c:var(--td)"></i>TD</li><li><i style="--c:var(--ts)"></i>TS</li><li><i style="--c:var(--c1)"></i>Cat 1</li>
         <li><i style="--c:var(--c2)"></i>2</li><li><i style="--c:var(--c3)"></i>3</li><li><i style="--c:var(--c4)"></i>4</li><li><i style="--c:var(--c5)"></i>5</li>

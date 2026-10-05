@@ -125,11 +125,27 @@
   G.storms = G.svg.append("g");
   G.rim = G.svg.append("path").attr("class", "g-rim").datum({ type: "Sphere" });
   const EARTH = window.Earth ? window.Earth.create($("#earth-canvas"), {
-    labels: $("#earth-labels"), onSelect: (k) => { const s = ALL.find((x) => x.key === k); if (s) select(s, { scroll: true }); } }) : null;
+    labels: $("#earth-labels"), onSelect: (k) => { const s = ALL.find((x) => x.key === k); if (s) select(s, { scroll: true }); },
+    onSpin: (on) => { if (EARTH && EARTH.onSpinChange) EARTH.onSpinChange(on); } }) : null;
   if (!EARTH) { $("#globe").hidden = false; $("#earth-canvas").hidden = true; }
+  window.__earth = EARTH;   // handy for debugging in the browser console
   $("#e-in").addEventListener("click", () => EARTH ? EARTH.zoomIn() : null);
   $("#e-out").addEventListener("click", () => EARTH ? EARTH.zoomOut() : null);
-  if (!EARTH) { $("#e-in").hidden = true; $("#e-out").hidden = true; }
+  if (!EARTH) { for (const id of ["#e-in", "#e-out", "#e-spin", "#e-reset"]) $(id).hidden = true; }
+  else {
+    const spinBtn = $("#e-spin");
+    const spin = (on) => { spinBtn.setAttribute("aria-pressed", String(on)); spinBtn.textContent = on ? "Stop spinning" : "Spin"; };
+    spinBtn.addEventListener("click", () => { const on = spinBtn.getAttribute("aria-pressed") !== "true"; EARTH.setSpin(on); spin(on); });
+    $("#e-reset").addEventListener("click", () => EARTH.reset());
+    EARTH.onSpinChange = spin;
+  }
+  const sunInfo = () => {
+    const [lo, la] = subsolar(Date.now()), now = new Date();
+    const box = $("#sun-info"); if (!box) return; box.textContent = "";
+    box.append(el("span", { text: "Sun directly overhead at " }), el("b", { text: ll(la, lo) }),
+      el("span", { text: ` · ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())} UTC · updates every minute` }));
+  };
+  sunInfo(); setInterval(sunInfo, 60000);
   function drawGlobe() {
     if (EARTH) {
       EARTH.setStorms(ACTIVE.map((s) => ({ key: s.key, name: s.name, kt: s.vmax_kt, south: s._south, color: col(s.vmax_kt),

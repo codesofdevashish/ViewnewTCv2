@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 /* ---------- tokens: light "chart paper" by default, dark only when chosen */
 :root {
   --paper: #eef2f4; --paper-2: #f7f9fa; --panel: #ffffff;
@@ -320,3 +321,16 @@ body { background: var(--paper); }
   .cue span { animation: none; }
   .card, .card img { transition: none; }
 }
+
+.earth-zoom .btn.wide { width: auto; padding: .35rem .8rem; font-size: .95rem; }
+.earth-zoom .btn[aria-pressed="true"] { background: #f2f7fa; color: #071019; }
+.daynight { display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; align-items: center; margin: .2rem 0 .8rem; font-size: .92rem; color: var(--ink-2); }
+.daynight b { color: var(--ink); font-weight: 600; }
+.dn-key { display: inline-flex; align-items: center; gap: .4rem; }
+.dn-key i { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+.dn-key .d { background: radial-gradient(circle at 35% 35%, #ffe9a8, #f5b83d); box-shadow: 0 0 8px #f5b83d; }
+.dn-key .n { background: #0b1626; border: 1px solid #3e5c70; box-shadow: inset 3px -2px 0 #ffd27a55; }
+.dn-key .t { width: 22px; height: 3px; border-radius: 2px; background: #ffc46b; }
+
+#sun-info { display: block; }
+#sun-info b { margin: 0 .2rem; }

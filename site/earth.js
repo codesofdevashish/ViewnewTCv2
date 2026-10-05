@@ -38,25 +38,30 @@
   const VERT = `varying vec2 vUv; varying vec3 vN; varying vec3 vP;
     void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position,1.0); vP = w.xyz;
       gl_Position = projectionMatrix * viewMatrix * w; }`;
-  const FRAG = `uniform sampler2D dayT; uniform sampler2D nightT; uniform sampler2D waterT; uniform vec3 sun; uniform float ready;
+  const FRAG = `uniform sampler2D dayT; uniform sampler2D nightT; uniform sampler2D waterT; uniform vec3 sun; uniform float ready; uniform float showLine;
     varying vec2 vUv; varying vec3 vN; varying vec3 vP;
     void main(){
       vec3 n = normalize(vN), s = normalize(sun), v = normalize(cameraPosition - vP);
       float d = dot(n, s);
-      float day = smoothstep(-0.10, 0.22, d);
+      float day = smoothstep(-0.035, 0.09, d);
       vec3 dc = texture2D(dayT, vUv).rgb, nc = texture2D(nightT, vUv).rgb;
       float w = texture2D(waterT, vUv).r;
-      vec3 lit = dc * (0.30 + 0.95 * pow(max(d, 0.0), 0.6));
-      vec3 lights = nc * vec3(1.0, 0.82, 0.55) * 1.7 * (1.0 - day);
-      vec3 moon = dc * vec3(0.15, 0.19, 0.28) + vec3(0.006, 0.012, 0.024);   // faint moonlit night
+      vec3 lit = dc * (0.42 + 0.90 * pow(max(d, 0.0), 0.5));
+      float L = dot(nc, vec3(0.30, 0.59, 0.11));                                     // keep only the city lights,
+      vec3 lights = vec3(1.0, 0.78, 0.45) * smoothstep(0.16, 0.55, L) * 1.5 * (1.0 - day);  // not the image's bluish land
+      vec3 moon = dc * vec3(0.075, 0.095, 0.16) + vec3(0.004, 0.008, 0.02);   // dark night, land just visible
       vec3 col = mix(moon + lights, lit, day);
       vec3 h = normalize(s + v); col += vec3(1.0, 0.92, 0.8) * pow(max(dot(n, h), 0.0), 70.0) * w * 0.65 * day;
-      float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0); col += vec3(0.30, 0.58, 1.0) * rim * (0.18 + 0.55 * day);
-      float twi = smoothstep(-0.25, 0.0, d) * (1.0 - smoothstep(0.0, 0.3, d)); col += vec3(0.85, 0.42, 0.20) * twi * 0.035;
+      float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0); col += vec3(0.30, 0.58, 1.0) * rim * (0.05 + 0.6 * day);
+      col += vec3(1.0, 0.72, 0.32) * exp(-pow(d / 0.012, 2.0)) * 0.55 * showLine;        // the terminator line
       gl_FragColor = vec4(mix(vec3(0.03, 0.06, 0.11), col, ready), 1.0);
     }`;
   const ATMO_V = `varying vec3 vN; void main(){ vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
-  const ATMO_F = `varying vec3 vN; void main(){ float i = pow(max(0.0, 0.62 - dot(vN, vec3(0.0,0.0,1.0))), 2.6); gl_FragColor = vec4(0.30, 0.58, 1.0, 1.0) * i * 0.9; }`;
+  const ATMO_V2 = `varying vec3 vN; varying vec3 vW; void main(){ vN = normalize(normalMatrix * normal); vW = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
+  const ATMO_F = `uniform vec3 sun; varying vec3 vN; varying vec3 vW; void main(){
+    float i = pow(max(0.0, 0.62 - dot(vN, vec3(0.0,0.0,1.0))), 2.6);
+    float lit = smoothstep(-0.35, 0.25, dot(vW, normalize(sun)));
+    gl_FragColor = vec4(0.30, 0.58, 1.0, 1.0) * i * (0.15 + 0.95 * lit); }`;
 
   function create(canvas, opts = {}) {
     if (!window.THREE || !webglOK()) return null;
@@ -76,16 +81,22 @@
     // earth
     const loader = new THREE.TextureLoader(), base = opts.base || "vendor/earth/";
     const blank = new THREE.DataTexture(new Uint8Array([8, 16, 28, 255]), 1, 1); blank.needsUpdate = true;
-    const uni = { dayT: { value: blank }, nightT: { value: blank }, waterT: { value: blank }, sun: { value: new THREE.Vector3(1, 0, 0) }, ready: { value: 0 } };
+    const uni = { dayT: { value: blank }, nightT: { value: blank }, waterT: { value: blank }, sun: { value: new THREE.Vector3(1, 0, 0) }, ready: { value: 0 }, showLine: { value: 1 } };
     let loaded = 0; const done = () => { if (++loaded === 3) fadeIn = performance.now(); };
     for (const [k, f] of [["dayT", "day.jpg"], ["nightT", "night.jpg"], ["waterT", "water.jpg"]])
       loader.load(base + f, (t) => { t.anisotropy = renderer.capabilities.getMaxAnisotropy(); uni[k].value = t; /* used as stored: sRGB in, sRGB out */ done(); }, undefined, done);
     let fadeIn = 0;
     const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), new THREE.ShaderMaterial({ uniforms: uni, vertexShader: VERT, fragmentShader: FRAG }));
     earth.rotation.y = -Math.PI / 2; globe.add(earth);
-    const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.09, 96, 64), new THREE.ShaderMaterial({ vertexShader: ATMO_V, fragmentShader: ATMO_F,
+    const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.09, 96, 64), new THREE.ShaderMaterial({ vertexShader: ATMO_V2, fragmentShader: ATMO_F, uniforms: { sun: uni.sun },
       side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
     scene.add(atmo);
+
+    // sun marker: where the Sun is directly overhead
+    const sunTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+      const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, "#fffbe8"); gr.addColorStop(0.25, "#ffd36b"); gr.addColorStop(0.55, "#ffb3404d"); gr.addColorStop(1, "#ffb34000");
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+    const sunSpr = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, transparent: true, depthWrite: false })); sunSpr.scale.set(0.16, 0.16, 1); globe.add(sunSpr);
 
     // storms
     const stormLayer = new THREE.Group(); globe.add(stormLayer);
@@ -145,8 +156,14 @@
     setInterval(() => { if (!opts.followTime) sunMs = Date.now(); }, 60000);
 
     // interaction: drag to turn, ctrl/cmd + wheel or buttons to zoom, click a storm to open it
-    let auto = !matchMedia("(prefers-reduced-motion: reduce)").matches, lastUser = 0, drag = null, tween = null;
-    canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY }; canvas.setPointerCapture(e.pointerId); auto = false; tween = null; });
+    let auto = false, lastUser = 0, drag = null, tween = null, home = null;
+    canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY }; canvas.setPointerCapture(e.pointerId);
+      if (auto) { auto = false; opts.onSpin && opts.onSpin(false); } tween = null; });
+    canvas.tabIndex = 0;
+    canvas.addEventListener("keydown", (e) => {
+      const st = 0.08, m = { ArrowLeft: [st, 0], ArrowRight: [-st, 0], ArrowUp: [0, st], ArrowDown: [0, -st] }[e.key];
+      if (!m) return; e.preventDefault(); tween = null; globe.rotation.y += m[0]; globe.rotation.x = Math.max(-1.25, Math.min(1.25, globe.rotation.x + m[1]));
+    });
     canvas.addEventListener("pointermove", (e) => {
       if (drag) { const k = 0.0042 * zf; globe.rotation.y += (e.clientX - drag.x) * k; globe.rotation.x = Math.max(-1.25, Math.min(1.25, globe.rotation.x + (e.clientY - drag.y) * k)); drag.x = e.clientX; drag.y = e.clientY; }
       else canvas.style.cursor = pick(e) ? "pointer" : "grab";
@@ -167,8 +184,11 @@
       const p = ll2v(lat, lon, 1), yaw = Math.atan2(p.x, p.z), pitch = Math.atan2(p.y, Math.hypot(p.x, p.z));
       let ty = -yaw, tx = Math.max(-1.1, Math.min(1.1, pitch));
       const y0 = globe.rotation.y, x0 = globe.rotation.x; let dy = ty - y0; dy = ((dy + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
-      tween = { t0: performance.now(), ms, y0, x0, dy, dx: tx - x0 }; auto = false; lastUser = performance.now();
+      tween = { t0: performance.now(), ms, y0, x0, dy, dx: tx - x0 }; lastUser = performance.now();
+      if (!home) home = [lat, lon];
     }
+    function setSpin(on) { auto = !!on; tween = null; }
+    function reset() { if (home) focus(home[0], home[1], 900); zf = 1; dist = baseDist; }
 
     // render loop (paused when off screen)
     let visible = true;
@@ -186,10 +206,11 @@
       if (!visible) return;
       if (tween) { const a = Math.min(1, (now - tween.t0) / tween.ms), e = a < .5 ? 4 * a * a * a : 1 - Math.pow(-2 * a + 2, 3) / 2;
         globe.rotation.y = tween.y0 + tween.dy * e; globe.rotation.x = tween.x0 + tween.dx * e; if (a >= 1) tween = null; }
-      else if (!drag && !auto && lastUser && now - lastUser > 15000 && !matchMedia("(prefers-reduced-motion: reduce)").matches) auto = true;
-      if (auto && !drag && !tween) globe.rotation.y += 0.0007;
+      const dt = Math.min(0.1, (now - (frame.last || now)) / 1000); frame.last = now;
+      if (auto && !drag && !tween) globe.rotation.y += 0.06 * dt;            // one turn in about 100 s, on any device
       camera.position.z += (dist - camera.position.z) * 0.12;
-      uni.sun.value.copy(sunLocal()).applyQuaternion(globe.quaternion);
+      const sl = sunLocal(); sunSpr.position.copy(sl).multiplyScalar(1.03);
+      uni.sun.value.copy(sl).applyQuaternion(globe.quaternion);
       if (fadeIn) uni.ready.value = Math.min(1, (now - fadeIn) / 900);
       for (const s of sprites) {
         s.material.rotation += (s.userData.south ? -1 : 1) * 0.035;
@@ -205,7 +226,9 @@
       renderer.render(scene, camera);
     }
     requestAnimationFrame(frame);
-    return { setStorms, focus, setSun, zoomIn: () => zoom(1 / 1.25), zoomOut: () => zoom(1.25) };
+    return { setStorms, focus, setSun, zoomIn: () => zoom(1 / 1.25), zoomOut: () => zoom(1.25),
+             view: () => ({ y: globe.rotation.y, x: globe.rotation.x, auto, tween: !!tween }),
+             setSpin, reset, subsolar: () => subsolar(sunMs), showTerminator: (on) => { uni.showLine.value = on ? 1 : 0; } };
   }
   window.Earth = { create };
 })();
