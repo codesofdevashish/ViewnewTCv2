@@ -1,0 +1,14 @@
+numpy
+scipy
+pandas
+xarray
+netCDF4
+cfgrib
+eccodes
+matplotlib
+scikit-image
+pillow
+requests
+imageio-ffmpeg
+cartopy
+shapely>=2
